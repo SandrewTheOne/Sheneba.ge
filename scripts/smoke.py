@@ -1,0 +1,65 @@
+from playwright.sync_api import sync_playwright
+import json
+from pathlib import Path
+out=Path(__file__).resolve().parents[1]/'validation';out.mkdir(exist_ok=True)
+with sync_playwright() as p:
+ browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+ page=browser.new_page(viewport={'width':1440,'height':1000},device_scale_factor=1)
+ errors=[]
+ page.on('pageerror',lambda e:errors.append(str(e)))
+ page.goto('http://127.0.0.1:3000/',wait_until='networkidle')
+ page.screenshot(path=str(out/'home-desktop.png'),full_page=True)
+ print('home',page.title(),page.locator('.professional-card').count())
+ page.get_by_role('button',name='ენის შეცვლა').click()
+ page.get_by_role('heading',name='Find a trusted professional for your next project').wait_for()
+ page.get_by_role('button',name='Search',exact=True).last.click()
+ page.wait_for_url('**/search?**');page.locator('.professional-card').first.wait_for();page.wait_for_load_state('networkidle')
+ print('quick-search',page.url,page.locator('.professional-card').count())
+ page.screenshot(path=str(out/'search-desktop.png'),full_page=True)
+ page.get_by_role('link',name='Clear filters').click();page.wait_for_url('**/search');page.get_by_role('heading',name='Found 15 professionals').wait_for();page.wait_for_load_state('networkidle')
+ assert page.locator('.professional-card').count()==6
+ page.get_by_role('button',name='Save',exact=True).first.click()
+ page.get_by_role('link',name='Favorites',exact=True).click();page.get_by_role('heading',name='Found 1 professionals').wait_for();page.wait_for_load_state('networkidle')
+ assert page.locator('.professional-card').count()==1
+ page.get_by_role('link',name='View profile').first.click();page.locator('.profile-banner').wait_for();page.wait_for_load_state('networkidle')
+ page.screenshot(path=str(out/'profile-desktop.png'),full_page=True)
+ page.get_by_role('button',name='Leave a review').click()
+ page.get_by_label('Your name',exact=True).fill('Smoke test reviewer')
+ page.get_by_label('Your review',exact=True).fill('A useful demo review.')
+ page.get_by_role('button',name='Add review').click()
+ page.get_by_role('status').wait_for();page.get_by_role('button',name='Close',exact=True).first.click()
+ assert page.get_by_text('Smoke test reviewer',exact=True).count()==1
+ page.get_by_role('button',name='Open chat').click()
+ page.get_by_label('Write a message').fill('Hello, I need an architect.')
+ page.get_by_role('button',name='Send',exact=True).click()
+ assert page.locator('.chat-bubble').count()==2
+ page.keyboard.press('Escape')
+ page.locator('.portfolio-item').first.click()
+ assert page.locator('.lightbox-image').is_visible()
+ page.keyboard.press('Escape')
+ page.goto('http://127.0.0.1:3000/',wait_until='networkidle')
+ page.get_by_role('button',name='Post a project',exact=True).first.click()
+ page.get_by_label('Project title',exact=True).fill('Test house project')
+ page.get_by_role('dialog').get_by_label('Budget / m²',exact=True).fill('20')
+ page.get_by_label('Description',exact=True).fill('A house project for the demo flow.')
+ page.get_by_role('button',name='Save project',exact=True).click()
+ assert len(page.evaluate('JSON.parse(localStorage.getItem("sheneba-projects"))'))==1
+ page.keyboard.press('Escape')
+ page.set_viewport_size({'width':390,'height':844})
+ page.screenshot(path=str(out/'home-mobile.png'),full_page=True)
+ assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+ page.goto('http://127.0.0.1:3000/search',wait_until='networkidle')
+ page.get_by_role('button',name='Filters',exact=True).click()
+ page.get_by_text('Interior designer',exact=True).last.click()
+ page.get_by_role('button',name='Show results (2)').click()
+ page.wait_for_load_state('networkidle')
+ assert page.locator('.professional-card').count()==2
+ page.screenshot(path=str(out/'search-mobile.png'),full_page=True)
+ assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+ page.get_by_role('link',name='View profile').first.click();page.locator('.profile-banner').wait_for();page.wait_for_load_state('networkidle')
+ page.screenshot(path=str(out/'profile-mobile.png'),full_page=True)
+ assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+ print('page errors:',errors)
+ assert not errors
+ browser.close()
+print('PASS: language, quick search, favorites, profile, review, chat, lightbox, project form, mobile drawer and responsive overflow')
